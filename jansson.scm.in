@@ -1,8 +1,113 @@
 (define-module (jansson)
   :use-module (system foreign-library)
-  :export (hello))
+  :use-module (system foreign)
+  :use-module (rnrs bytevectors)
+  :use-module (srfi srfi-43)
+  :export (jansson-version
+		   scm->json-string))
 
 (define libjansson (dynamic-link "@JANSSON_LIBDIR@/libjansson"))
 
-(define (hello)
-  (display "hello"))
+(define (scm->json-string scm)
+  (json-dump (json-build scm)))
+
+(define (jansson-version)
+  (let ((f (foreign-library-function libjansson
+									 "jansson_version_str"
+									 #:return-type '*)))
+	(pointer->string (f))))
+
+(define (json-build-object scm)
+  (let ((obj (json-object)))
+	(for-each (lambda (elem)
+				(json-object-set obj
+								 (symbol->string (car elem))
+								 (json-build (cdr elem))))
+			  scm)
+	obj))
+
+(define (json-build-array scm)
+  (let ((arr (json-array)))
+	(vector-for-each (lambda (_ elem)
+					   (json-array-append arr (json-build elem)))
+					 scm)
+	arr))
+
+(define (json-build scm)
+  (cond ((string? scm)
+		 (json-string scm))
+		((boolean? scm)
+		 (json-boolean scm))
+		((null? scm)
+		 (json-null))
+		((list? scm)
+		 (json-build-object scm))
+		((vector? scm)
+		 (json-build-array scm))))
+
+(define json-object
+  (foreign-library-function libjansson
+							"json_object"
+							#:return-type '*))
+
+(define (json-object-set obj key val)
+  (let ((f (foreign-library-function libjansson
+							"json_object_set_new"
+							#:return-type int
+							#:arg-types '(* * *))))
+	(f obj (string->pointer key) val)))
+
+(define json-array
+  (foreign-library-function libjansson
+							"json_array"
+							#:return-type '*))
+
+(define json-array-append
+  (foreign-library-function libjansson
+							"json_array_append_new"
+							#:return-type int
+							#:arg-types '(* *)))
+
+(define (json-string val)
+  (let ((f (foreign-library-function libjansson
+									 "json_string"
+									 #:return-type '*
+									 #:arg-types '(*))))
+	(f (string->pointer val))))
+
+(define json-integer
+  (foreign-library-function libjansson
+							"json_integer"
+							#:return-type '*
+							#:arg-types `(,int)))
+
+(define json-real
+  (foreign-library-function libjansson
+							"json_real"
+							#:return-type '*
+							#:arg-types `(,double)))
+
+(define (json-boolean val)
+  (if val (json-true) (json-false)))
+
+(define json-true
+  (foreign-library-function libjansson
+							"json_true"
+							#:return-type '*))
+
+(define json-false
+  (foreign-library-function libjansson
+							"json_false"
+							#:return-type '*))
+
+(define json-null
+  (foreign-library-function libjansson
+							"json_null"
+							#:return-type '*))
+
+(define (json-dump obj)
+  (let ((f (foreign-library-function libjansson
+									 "json_dumps"
+									 #:return-type '*
+									 #:arg-types `(* ,size_t))))
+	(pointer->string (f obj 0))))
