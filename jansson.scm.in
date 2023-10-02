@@ -1,0 +1,8 @@
+(define-module (jansson)
+  :use-module (system foreign-library)
+  :export (hello))
+
+(define libjansson (dynamic-link "@JANSSON_LIBDIR@/libjansson"))
+
+(define (hello)
+  (display "hello"))
